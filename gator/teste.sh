@@ -29,7 +29,8 @@ echo "Gator dir: $gator_dir"
 cd $gator_dir
 
 START=$(date +%s)
-./gator a -p $apk_path -client WTGDemoClient #> $result_dir/gator.log
+./gator a -p $apk_path -client TesteClient #> $result_dir/gator.log
+#./gator a -p $apk_path -client WTGDemoClient #> $result_dir/gator.log
 END=$(date +%s)
 DIFF=$(( $END - $START ))
 echo "Processed in $DIFF seconds."  >> $result_dir/gator.log

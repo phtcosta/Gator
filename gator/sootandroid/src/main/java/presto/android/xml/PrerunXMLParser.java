@@ -9,22 +9,28 @@
 
 package presto.android.xml;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.sun.org.apache.xerces.internal.impl.io.MalformedByteSequenceException;
-import org.w3c.dom.*;
-import org.xml.sax.SAXException;
-import presto.android.Configs;
-import presto.android.Logger;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+
+import presto.android.Configs;
+import presto.android.Logger;
 
 
 /**
@@ -75,10 +81,8 @@ public class PrerunXMLParser {
       } else {
         Configs.onDemandClassSet.add(cls);
       }
-      return;
-    } else {
-      Configs.onDemandClassSet.add(guiName);
     }
+	Configs.onDemandClassSet.add(guiName);
 
     // this seems safe, but we really need SootClass.BODIES (TODO)
     // Scene.v().tryLoadClass(guiName, SootClass.HIERARCHY);
@@ -128,11 +132,16 @@ public class PrerunXMLParser {
       Logger.err(getClass().getSimpleName(), "invalid xml file. Error message: " + e.getMessage()
                   + " File name: " + file);
       return;
-    } catch (MalformedByteSequenceException e) {
-      Logger.err(getClass().getSimpleName(), e.getMessage() + " " + file);
-      System.exit(1);
-      return;
-    } catch (IOException e) {
+//    } catch (MalformedByteSequenceException e) {
+//      Logger.err(getClass().getSimpleName(), e.getMessage() + " " + file);
+//      System.exit(1);
+//      return;
+    }  catch (IOException e) {
+    	if("MalformedByteSequenceException".equals(e.getClass().getName())) {
+    		Logger.err(getClass().getSimpleName(), e.getMessage() + " " + file);
+    	      System.exit(1);
+    	      return;
+    	}
       throw new RuntimeException(e);
     } catch (ParserConfigurationException e) {
       throw new RuntimeException(e);
@@ -170,9 +179,8 @@ public class PrerunXMLParser {
           }
           Logger.trace("readLayoutOnSingleFile", "layout file " + file);
           continue;
-        } else {
-          guiName = attrMap.getNamedItem("class").getTextContent();
         }
+		guiName = attrMap.getNamedItem("class").getTextContent();
       } else if (guiName.equals("MenuItemView")) {
         // FIXME(tony): this is an "approximation".
         guiName = "android.view.MenuItem";
@@ -187,19 +195,7 @@ public class PrerunXMLParser {
         Node newNode = children.item(i);
         String nodeName = newNode.getNodeName();
 
-        if ("#comment".equals(nodeName)) {
-          continue;
-        }
-        if ("#text".equals(nodeName)) {
-          // possible for XML files created on a different operating system
-          // than the one our analysis is run on
-          continue;
-        }
-        if (nodeName.equals("requestFocus")) {
-          continue;
-        }
-
-        if (newNode.getNodeName().equals("include")) {
+        if ("#comment".equals(nodeName) || "#text".equals(nodeName) || nodeName.equals("requestFocus") || newNode.getNodeName().equals("include")) {
           continue;
         }
         work.add(newNode);
@@ -275,10 +271,7 @@ public class PrerunXMLParser {
       for (int i = 0; i < children.getLength(); i++) {
         Node newNode = children.item(i);
         String nodeName = newNode.getNodeName();
-        if ("#comment".equals(nodeName)) {
-          continue;
-        }
-        if ("#text".equals(nodeName)) {
+        if ("#comment".equals(nodeName) || "#text".equals(nodeName)) {
           // possible for XML files created on a different operating system
           // than the one our analysis is run on
           continue;
@@ -309,12 +302,9 @@ class HelperInner {
     if (!classNameFromXml.contains(".")) {
       classNameFromXml = appPkg + "." + classNameFromXml;
     }
-    if (Configs.benchmarkName.equals("Astrid")
-            && astridMissingActivities.contains(classNameFromXml)) {
-      return null;
-    }
-    if (Configs.benchmarkName.equals("NPR")
-            && nprMissingActivities.contains(classNameFromXml)) {
+    if ((Configs.benchmarkName.equals("Astrid")
+            && astridMissingActivities.contains(classNameFromXml)) || (Configs.benchmarkName.equals("NPR")
+            && nprMissingActivities.contains(classNameFromXml))) {
       return null;
     }
     return classNameFromXml;
