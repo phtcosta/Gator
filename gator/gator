@@ -47,10 +47,14 @@ def find_best_google_api(sdk_path, api_level):
 
 
 def analyze(args, unknown):
-    jar = os.path.join(gator_dir, 'sootandroid', 'build', 'libs', 'sootandroid-1.0-SNAPSHOT-all.jar')
+    # jar = os.path.join(gator_dir, 'sootandroid', 'build', 'libs', 'sootandroid-1.0-SNAPSHOT-all.jar')    
+    jar = os.path.join(gator_dir, 'sootandroid', 'target', 'rvsec-gator-jar-with-dependencies.jar') 
     if not os.path.exists(jar):
         print('...... please build GATOR first.')
         exit(-1)
+    tmp = "/pedro/desenvolvimento/workspaces/workspaces-doutorado/workspace-rv/rvsec/rvsec/rvsec-android/teste-gator/target/teste-gator-0.6.0-SNAPSHOT.jar"
+    jar = "{}:{}".format(jar, tmp)
+    print("************** JAR: {}".format(jar))
     apktool_dir = decode_res_from_apk(args.apkpath)
     if args.apilevel != '-1':
         target_level = int(args.apilevel)
@@ -62,8 +66,9 @@ def analyze(args, unknown):
         elif target_level < 10:
             print('...... target API level is below 10. Force to use 10.')
             target_level = 10
-    if not args.sdkpath:
-        args.sdkpath = os.environ['ANDROID_SDK']
+    if not args.sdkpath: 
+        args.sdkpath = os.environ['ANDROID_SDK_HOME']
+        # args.sdkpath = os.environ['ANDROID_SDK']
     print('...... resource decoded to %s' % apktool_dir)
     cmd = ['java', '-Xmx12G', '-cp', jar, 'presto.android.Main',
            '-sootandroidDir', os.path.join(gator_dir, 'sootandroid'),
