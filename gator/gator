@@ -52,77 +52,97 @@ def analyze(args, unknown):
     if not os.path.exists(jar):
         print('...... please build GATOR first.')
         exit(-1)
-    tmp = "/pedro/desenvolvimento/workspaces/workspaces-doutorado/workspace-rv/rvsec/rvsec/rvsec-android/teste-gator/target/teste-gator-0.6.0-SNAPSHOT.jar"
-    jar = "{}:{}".format(jar, tmp)
-    print("************** JAR: {}".format(jar))
-    apktool_dir = decode_res_from_apk(args.apkpath)
-    if args.apilevel != '-1':
-        target_level = int(args.apilevel)
-    else:
-        target_level = extract_target_api(os.path.join(apktool_dir, 'apktool.yml'))
-        if target_level == -1:
-            print('...... cannot determine the target API level for APK. Fallback to use 27.')
-            target_level = 27
-        elif target_level < 10:
-            print('...... target API level is below 10. Force to use 10.')
-            target_level = 10
-    if not args.sdkpath: 
-        args.sdkpath = os.environ['ANDROID_SDK_HOME']
+
+    if args.classpath != '':        
+        jar = "{}:{}".format(jar, args.classpath)
+    print("...... classpath: {}".format(jar))
+
+    sdk_path = args.sdkpath
+    if not sdk_path: 
+        sdk_path = os.environ['ANDROID_SDK_HOME']
         # args.sdkpath = os.environ['ANDROID_SDK']
+
+    apktool_dir = decode_res_from_apk(args.apkpath)
     print('...... resource decoded to %s' % apktool_dir)
+
+    target_level = get_target_level(args, apktool_dir)
+    print('...... target level: {}'.format(target_level))
+
+    sootandroid_dir = os.path.join(gator_dir, 'sootandroid')
     cmd = ['java', '-Xmx12G', '-cp', jar, 'presto.android.Main',
-           '-sootandroidDir', os.path.join(gator_dir, 'sootandroid'),
+           '-sootandroidDir', sootandroid_dir,
            '-sdkDir', args.sdkpath,
-           '-listenerSpecFile', os.path.join(gator_dir, 'sootandroid', 'listeners.xml'),
-           '-wtgSpecFile', os.path.join(gator_dir, 'sootandroid', 'wtg.xml'),
+           '-listenerSpecFile', os.path.join(sootandroid_dir, 'listeners.xml'),
+           '-wtgSpecFile', os.path.join(sootandroid_dir, 'wtg.xml'),
            '-resourcePath', os.path.join(apktool_dir, 'res'),
            '-manifestFile', os.path.join(apktool_dir, 'AndroidManifest.xml'),
-           '-project', args.apkpath,
+           '-project', sdk_path,
            '-apiLevel', 'android-%s' % target_level,
            '-guiAnalysis',
            '-benchmarkName', args.apkpath.split('/')[-1],
-           '-libraryPackageListFile', os.path.join(gator_dir, 'sootandroid', 'libPackages.txt')
+           '-libraryPackageListFile', os.path.join(sootandroid_dir, 'libPackages.txt')
            ]
-    android_jar = os.path.join(args.sdkpath, 'platforms', 'android-%s' % target_level, 'android.jar')
+    
+    android_jar = os.path.join(sdk_path, 'platforms', 'android-%s' % target_level, 'android.jar')
     if not path_exists(android_jar):
         print('>>>>>> %s does not exist, try to install with sdkmanager...' % android_jar)
-        sub_cmd = [os.path.join(args.sdkpath, 'tools', 'bin', 'sdkmanager'),
+        sub_cmd = [os.path.join(sdk_path, 'tools', 'bin', 'sdkmanager'),
                    'platforms;android-%s' % target_level]
         # print('>>>>>> %s' % ' '.join(sub_cmd))
         call(sub_cmd)
-    if args.google:
-        google_api_dir = find_best_google_api(args.sdkpath, target_level)
-        if google_api_dir == 0 or not path_exists(google_api_dir):
-            print(">>>>>> Google API Level: %d not installed, try to install with sdkmanager..." % target_level)
-            sub_cmd = [os.path.join(args.sdkpath, 'tools', 'bin', 'sdkmanager'),
-                       'add-ons;addon-google_apis-google-%s' % target_level]
-            # print('>>>>>> %s' % ' '.join(sub_cmd))
-            if call(sub_cmd) != 0:
-                sub_cmd = [os.path.join(args.sdkpath, 'tools', 'bin', 'sdkmanager'),
-                           'add-ons;addon-google_apis-google-24']
-                # print('>>>>>> %s' % ' '.join(sub_cmd))
-                call(sub_cmd)
-            google_api_dir = find_best_google_api(args.sdkpath, target_level)
-        google_api = extract_libs_from_path(google_api_dir + "/libs")
-        if len(google_api) != 0:
-            android_jar = android_jar + ":" + google_api
+    android_jar = process_google_api(args, sdk_path, target_level, android_jar)
     cmd.extend(['-android', android_jar])
     if args.verbose:
         cmd.append('-verbose')
-    cmd.extend(unknown)
+    cmd.extend(unknown) # TODO ????
     print('...... %s' % ' '.join(cmd))
     if args.debug:  # print out the command
         return
     if not args.logpath:
         try:
-            call(cmd, timeout=int(args.timeout))
+            call(cmd, timeout=int(args.timeout)) 
         except TimeoutExpired:
             sys.exit(-50)
     else:
         with open(args.logpath, 'w') as outfile:
             call(cmd, timeout=int(args.timeout), stdout=outfile, stderr=outfile)
             print('...... log saved to %s' % outfile.name)
+            
     remove_temp_dirs()
+
+
+def process_google_api(args, sdk_path, target_level, android_jar):
+    if args.google:
+        google_api_dir = find_best_google_api(sdk_path, target_level)
+        if google_api_dir == 0 or not path_exists(google_api_dir):
+            print(">>>>>> Google API Level: %d not installed, try to install with sdkmanager..." % target_level)
+            sub_cmd = [os.path.join(sdk_path, 'tools', 'bin', 'sdkmanager'),
+                       'add-ons;addon-google_apis-google-%s' % target_level]
+            # print('>>>>>> %s' % ' '.join(sub_cmd))
+            if call(sub_cmd) != 0:
+                sub_cmd = [os.path.join(sdk_path, 'tools', 'bin', 'sdkmanager'),
+                           'add-ons;addon-google_apis-google-24']
+                # print('>>>>>> %s' % ' '.join(sub_cmd))
+                call(sub_cmd)
+            google_api_dir = find_best_google_api(sdk_path, target_level)
+        google_api = extract_libs_from_path(google_api_dir + "/libs")
+        if len(google_api) != 0:
+            android_jar = android_jar + ":" + google_api
+    return android_jar
+
+
+def get_target_level(args, apktool_dir):
+    if args.apilevel != '-1':
+        target_level = int(args.apilevel)
+    else:
+        target_level = extract_target_api(os.path.join(apktool_dir, 'apktool.yml'))
+        if target_level == -1:
+            print('...... cannot determine the target API level for APK. Fallback to use 29.')
+            target_level = 29
+        elif target_level < 10:
+            print('...... target API level is below 10. Force to use 10.')
+            target_level = 10
+    return target_level
 
 
 def build(args, unknown):
@@ -166,9 +186,9 @@ def main():
 
     parser_analyze.add_argument('--sdk',
                                 dest='sdkpath',
-                                metavar='ANDROID_SDK',
+                                metavar='ANDROID_SDK_HOME',
                                 required=False,
-                                help='path to the Android SDK ($ANDROID_SDK by default)')
+                                help='path to the Android SDK ($ANDROID_SDK_HOME by default)')
 
     parser_analyze.add_argument('--log',
                                 dest='logpath',
@@ -196,6 +216,12 @@ def main():
                                 required=False,
                                 default='-1',
                                 help='specify API level')
+    
+    parser_analyze.add_argument('-c','--classpath',
+                                dest='classpath',                                
+                                required=False,
+                                default='',
+                                help='additional classpath (jars with clients)')
 
     parser_analyze.add_argument('-p', '--apk',
                                 dest='apkpath',
